@@ -2,7 +2,6 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
-#include <fstream>
 #include <sstream>
 #include <vector>
 
@@ -28,20 +27,22 @@ namespace RB {
 		return pl ? pl->m_gameState.m_currentProgress : 0;
 	}
 
-	inline std::filesystem::path file() {
+	inline auto file() {
 		return Mod::get()->getSaveDir() / "macro.txt";
 	}
 
 	inline void save() {
-		std::ofstream out(file());
+		std::ostringstream out;
 		for (auto& i : macro) {
 			out << i.frame << ' ' << i.button << ' ' << (i.down ? 1 : 0) << ' ' << (i.p1 ? 1 : 0) << '\n';
 		}
+		(void)utils::file::writeString(file(), out.str());
 	}
 
 	inline bool load() {
-		std::ifstream in(file());
-		if (!in) return false;
+		auto res = utils::file::readString(file());
+		if (res.isErr()) return false;
+		std::istringstream in(res.unwrap());
 		macro.clear();
 		int f, b, d, p;
 		while (in >> f >> b >> d >> p) {
@@ -66,7 +67,7 @@ class $modify(RBGameLayer, GJBaseGameLayer) {
 		GJBaseGameLayer::handleButton(down, button, isPlayer1);
 	}
 
-	void processCommands(float dt) {
+	void processCommands(float dt, bool isHalfTick, bool isLastTick) {
 		if (RB::mode == Mode::Replaying && this == static_cast<GJBaseGameLayer*>(PlayLayer::get())) {
 			int f = RB::frame();
 			while (RB::idx < RB::macro.size() && RB::macro[RB::idx].frame <= f) {
@@ -77,7 +78,7 @@ class $modify(RBGameLayer, GJBaseGameLayer) {
 				RB::idx++;
 			}
 		}
-		GJBaseGameLayer::processCommands(dt);
+		GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
 	}
 };
 
