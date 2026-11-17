@@ -1,0 +1,12 @@
+{
+	"geode": "6.0.0-alpha.1",
+	"gd": {
+		"android": "2.2091"
+	},
+	"version": "v1.0.0",
+	"id": "dev.replaybot",
+	"name": "ReplayBot",
+	"developer": "dev",
+	"description": "Macro recorder and replay bot (frame based), xdBot style.",
+	"tags": ["utility"]
+}
