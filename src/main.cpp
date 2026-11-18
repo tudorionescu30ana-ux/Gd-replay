@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include <Geode/utils/async.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
@@ -191,25 +192,27 @@ namespace RB {
 		notify(fmt::format("Imported {} ({} inputs)", name, m.size()), NotificationIcon::Success);
 	}
 
-	using PickTask = decltype(utils::file::pick(utils::file::PickMode::OpenFile, utils::file::FilePickOptions()));
-
 	inline void importFromFile() {
-		static EventListener<PickTask>* listener = new EventListener<PickTask>();
-		listener->bind([](PickTask::Event* ev) {
-			auto* res = ev->getValue();
-			if (!res) return;
-			if (res->isErr()) {
-				notify("No file picked", NotificationIcon::Error);
-				return;
+		geode::async::spawn(
+			utils::file::pick(utils::file::PickMode::OpenFile, utils::file::FilePickOptions()),
+			[](auto res) {
+				if (res.isErr()) {
+					notify("Can't open file picker", NotificationIcon::Error);
+					return;
+				}
+				auto opt = res.unwrap();
+				if (!opt) {
+					notify("No file picked", NotificationIcon::Error);
+					return;
+				}
+				auto text = utils::file::readString(*opt);
+				if (text.isErr()) {
+					notify("Can't read file", NotificationIcon::Error);
+					return;
+				}
+				importText(text.unwrap());
 			}
-			auto text = utils::file::readString(res->unwrap());
-			if (text.isErr()) {
-				notify("Can't read file", NotificationIcon::Error);
-				return;
-			}
-			importText(text.unwrap());
-		});
-		listener->setFilter(utils::file::pick(utils::file::PickMode::OpenFile, utils::file::FilePickOptions()));
+		);
 	}
 }
 
