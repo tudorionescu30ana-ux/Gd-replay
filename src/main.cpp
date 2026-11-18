@@ -1,5 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/async.hpp>
+#include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
@@ -283,8 +284,8 @@ class $modify(RBPlayLayer, PlayLayer) {
 	}
 };
 
-static ButtonSprite* rbSprite(char const* text, int width = 100) {
-	return ButtonSprite::create(text, width, true, "bigFont.fnt", "GJ_button_01.png", 30.f, 0.6f);
+static ButtonSprite* rbSprite(char const* text, int width = 100, float scale = 0.8f) {
+	return ButtonSprite::create(text, width, true, "bigFont.fnt", "GJ_button_01.png", 30.f, scale);
 }
 
 static CCPoint rbCenter(FLAlertLayer* a) {
@@ -292,56 +293,58 @@ static CCPoint rbCenter(FLAlertLayer* a) {
 	return a->m_buttonMenu->convertToNodeSpace({win.width / 2, win.height / 2});
 }
 
-// ---------- list of saved macros (paged) ----------
+// ---------- list of saved macros (scrollable) ----------
 class RBList : public CCNode {
 public:
 	FLAlertLayer* m_alert = nullptr;
-	int m_page = 0;
 
-	static void open(int page) {
+	static void open() {
 		RB::loadIndex();
-		constexpr int PER = 5;
 		int total = (int)RB::names.size();
-		int pages = std::max(1, (total + PER - 1) / PER);
-		if (page < 0) page = 0;
-		if (page >= pages) page = pages - 1;
 
-		auto title = fmt::format("Saved macros ({}/{})", page + 1, pages);
-		auto alert = FLAlertLayer::create(nullptr, title.c_str(), " ", "Close", nullptr, 320.f, false, 290.f, 1.f);
+		auto title = fmt::format("Saved macros ({})", total);
+		auto alert = FLAlertLayer::create(nullptr, title.c_str(), " ", "Close", nullptr, 340.f, false, 300.f, 1.f);
 
 		auto h = new RBList();
 		h->init();
 		h->autorelease();
 		h->m_alert = alert;
-		h->m_page = page;
 		alert->m_mainLayer->addChild(h);
 
 		auto c = rbCenter(alert);
+
 		if (total == 0) {
 			auto lbl = CCLabelBMFont::create("No saved macros", "bigFont.fnt");
-			lbl->setScale(0.5f);
-			lbl->setPosition({c.x, c.y + 20.f});
+			lbl->setScale(0.6f);
+			lbl->setPosition({c.x, c.y + 10.f});
 			alert->m_buttonMenu->addChild(lbl);
+		} else {
+			constexpr float W = 270.f;
+			constexpr float H = 170.f;
+			constexpr float ROW = 42.f;
+			float contentH = std::max(H, total * ROW);
+
+			auto scroll = ScrollLayer::create({W, H});
+			scroll->setPosition({c.x - W / 2, c.y - H / 2 + 5.f});
+			scroll->m_contentLayer->setContentSize({W, contentH});
+
+			auto menu = CCMenu::create();
+			menu->setPosition({0.f, 0.f});
+			menu->setContentSize({W, contentH});
+			for (int i = 0; i < total; i++) {
+				std::string label = RB::names[i];
+				if (label.size() > 16) label = label.substr(0, 16);
+				if (i == RB::selected) label = "> " + label;
+				auto btn = CCMenuItemSpriteExtra::create(rbSprite(label.c_str(), 260), h, menu_selector(RBList::onPick));
+				btn->setTag(i);
+				btn->setPosition({W / 2, contentH - (i + 0.5f) * ROW});
+				menu->addChild(btn);
+			}
+			scroll->m_contentLayer->addChild(menu);
+			scroll->moveToTop();
+			alert->m_buttonMenu->getParent()->addChild(scroll, 5);
 		}
-		for (int k = 0; k < PER; k++) {
-			int i = page * PER + k;
-			if (i >= total) break;
-			std::string label = RB::names[i];
-			if (label.size() > 16) label = label.substr(0, 16);
-			if (i == RB::selected) label = "> " + label;
-			auto btn = CCMenuItemSpriteExtra::create(rbSprite(label.c_str(), 200), h, menu_selector(RBList::onPick));
-			btn->setTag(i);
-			btn->setPosition({c.x, c.y + 70.f - k * 35.f});
-			alert->m_buttonMenu->addChild(btn);
-		}
-		if (pages > 1) {
-			auto prev = CCMenuItemSpriteExtra::create(rbSprite("Prev", 60), h, menu_selector(RBList::onPrev));
-			prev->setPosition({c.x - 70.f, c.y - 105.f});
-			alert->m_buttonMenu->addChild(prev);
-			auto next = CCMenuItemSpriteExtra::create(rbSprite("Next", 60), h, menu_selector(RBList::onNext));
-			next->setPosition({c.x + 70.f, c.y - 105.f});
-			alert->m_buttonMenu->addChild(next);
-		}
+		handleTouchPriority(alert);
 		alert->show();
 	}
 
@@ -361,22 +364,6 @@ public:
 		}
 		this->release();
 	}
-
-	void onPrev(CCObject*) {
-		int p = m_page - 1;
-		this->retain();
-		m_alert->keyBackClicked();
-		open(p);
-		this->release();
-	}
-
-	void onNext(CCObject*) {
-		int p = m_page + 1;
-		this->retain();
-		m_alert->keyBackClicked();
-		open(p);
-		this->release();
-	}
 };
 
 // ---------- main hub menu ----------
@@ -386,7 +373,7 @@ public:
 	PauseLayer* m_pause = nullptr;
 
 	static void open(PauseLayer* pause) {
-		auto alert = FLAlertLayer::create(nullptr, "ReplayBot", " ", "Close", nullptr, 320.f, false, 270.f, 1.f);
+		auto alert = FLAlertLayer::create(nullptr, "ReplayBot", " ", "Close", nullptr, 400.f, false, 300.f, 1.f);
 
 		auto h = new RBHub();
 		h->init();
@@ -397,17 +384,18 @@ public:
 
 		auto c = rbCenter(alert);
 		auto add = [&](char const* text, SEL_MenuHandler sel, float x, float y) {
-			auto btn = CCMenuItemSpriteExtra::create(rbSprite(text, 110), h, sel);
+			auto btn = CCMenuItemSpriteExtra::create(rbSprite(text, 150), h, sel);
 			btn->setPosition({c.x + x, c.y + y});
 			alert->m_buttonMenu->addChild(btn);
 		};
-		add("Record", menu_selector(RBHub::onRec), -65.f, 75.f);
-		add("Replay", menu_selector(RBHub::onPlay), 65.f, 75.f);
-		add("Stop", menu_selector(RBHub::onStop), -65.f, 40.f);
-		add("Save", menu_selector(RBHub::onSave), 65.f, 40.f);
-		add("Select", menu_selector(RBHub::onSelect), -65.f, 5.f);
-		add("Import", menu_selector(RBHub::onImport), 65.f, 5.f);
-		add("Paste", menu_selector(RBHub::onPaste), 0.f, -30.f);
+		add("Record", menu_selector(RBHub::onRec), -90.f, 70.f);
+		add("Replay", menu_selector(RBHub::onPlay), 90.f, 70.f);
+		add("Stop", menu_selector(RBHub::onStop), -90.f, 25.f);
+		add("Save", menu_selector(RBHub::onSave), 90.f, 25.f);
+		add("Select", menu_selector(RBHub::onSelect), -90.f, -20.f);
+		add("Import", menu_selector(RBHub::onImport), 90.f, -20.f);
+		add("Paste", menu_selector(RBHub::onPaste), 0.f, -65.f);
+		handleTouchPriority(alert);
 		alert->show();
 	}
 
@@ -479,7 +467,7 @@ public:
 	void onSelect(CCObject*) {
 		this->retain();
 		m_alert->keyBackClicked();
-		RBList::open(RB::selected >= 0 ? RB::selected / 5 : 0);
+		RBList::open();
 		this->release();
 	}
 
@@ -504,7 +492,7 @@ class $modify(RBPause, PauseLayer) {
 		auto win = CCDirector::get()->getWinSize();
 		auto menu = CCMenu::create();
 		menu->setPosition({win.width - 60.f, win.height / 2});
-		auto btn = CCMenuItemSpriteExtra::create(rbSprite("ReplayBot", 90), this, menu_selector(RBPause::onHub));
+		auto btn = CCMenuItemSpriteExtra::create(rbSprite("ReplayBot", 110), this, menu_selector(RBPause::onHub));
 		menu->addChild(btn);
 		this->addChild(menu);
 	}
